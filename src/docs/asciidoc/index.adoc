@@ -51,6 +51,7 @@ Misc OSS contribs (Gradle plugins, deck2pdf, jlangdetect, ...)'''
 ** compile-time
 ** run-time
 
+[background-color="#01303a"]
 == Java 9 modules
 
 === Declaring a module
@@ -96,10 +97,13 @@ Death to *split packages*.
 * No built-in support for modulepath
 * But we can help!
 
+[background-color="#01303a"]
 == The Java Library plugin
 
+=== The Java Library plugin
+
 * Introduced in Gradle 3.4
-* Aimed at Java Libraries
+* Aimed at Java libraries
 * Separates API and implementation dependencies
 
 === API dependencies
@@ -256,7 +260,10 @@ src/test/java -> your test sources
 ** It's better for incrementality
 ** Problem: one or two modules?
 
+[background-color="#01303a"]
 == Let's migrate!
+
+=== Let's migrate
 
 * Bottom-up approach
 * Fully compatible
@@ -438,25 +445,19 @@ run {
 }
 ----
 
-=== The `startScripts` task
+[background-color="#01303a"]
+== We have good news!
+
+=== Experimental Jigsaw plugin
 
 [source,groovy]
 ----
-startScripts {
-    inputs.property("moduleName", moduleName)
-    doFirst {
-        classpath = files()
-        defaultJvmOpts = [
-            '--module-path', 'APP_HOME_LIBS',
-            '--module', mainClassName
-        ]
-    }
-    doLast{
-        // ... snip ...
-    }
+plugins {
+    id 'org.gradle.java.experimental-jigsaw' version '0.1.1'
 }
 ----
 
+[background-color="#01303a"]
 == Multi-release jars
 
 === Goal
@@ -562,7 +563,10 @@ project.afterEvaluate {
 }
 ----
 
-== jlink
+[background-color="#01303a"]
+== Minimal runtime image
+
+=== jlink
 
 * Allows building minimal runtime images
 * requires **full modularization**
