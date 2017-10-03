@@ -1,6 +1,6 @@
-= : Minutes to seconds, maximizing incrementality
+= : Building and testing Java 9 applications with Gradle
 Cédric Champeau (@CedricChampeau), Gradle
-2017-06-23
+2017-10-04
 :revnumber: {project-version}
 :example-caption!:
 ifndef::imagesdir[:imagesdir: images]
@@ -12,23 +12,8 @@ ifndef::sourcedir[:sourcedir: ../java]
 :title-slide-transition: zoom
 :title-slide-transition-speed: fast
 :icons: font
- 
+
 == Who am I
-
-image::nantes.jpg[background, size=cover]
-
-++++
-<style>
-.asciinema-terminal.font-medium {
-  font-size: 16px;
-}
-</style>
-
-<div class="pictureWrapper">
-   <div class="picture"><img src="images/mini-me.png"></div>
-</div>
-
-++++
 
 [source,groovy]
 ----
@@ -51,207 +36,84 @@ Misc OSS contribs (Gradle plugins, deck2pdf, jlangdetect, ...)'''
 
 == Agenda
 
-* Incremental builds
-* Compile avoidance
-* Incremental compilation
-* Variant-aware dependency management
+* What are Java 9 modules?
+* Migrating an existing app to modules
+* Running tests
+* (bonus) multi-release jars
 
-[background-color="#01303a"]
-== Incremental builds
 
-== Why does it matter?
+== JPMS aka Modules for Java
 
-* Gradle is meant for incremental builds
-* `clean` is a waste of time
-* Time is $$$
+* Modularity for the Java platform
+** *Reliable configuration* (goodbye _classpath_)
+** *Strong encapsulation* (goodbye _com.sun_)
+* Enforce strict boundaries between modules
+** compile-time
+** run-time
 
-== The incrementality test
+== Java 9 modules
 
-[%step]
-* Run a build
-* Run again with no change
-* If a task was re-executed, you got it wrong
+=== Declaring a module
 
-== Properly writing tasks
-
-=== Example: building a shaded jar
-
-[source,groovy]
-----
-task shadedJar(type: ShadedJar) {
-   jarFile = file("$buildDir/libs/shaded.jar")
-   classpath = configurations.runtime
-   mapping = ['org.apache': 'shaded.org.apache']
-}
-----
-
-* What are the task inputs?
-* What are the task outputs?
-* What if one of them changes?
-
-=== Declaring inputs
-
+.module-info.java
 [source,java]
 ----
-public class ShadedJar extends DefaultTask {
-   ...
-   @InputFiles
-   FileCollection getClasspath() { ... }
-
-   @Input
-   Map<String, String> getMapping() { ... }
+module com.foo.bar {
+    requires org.baz.qux;
+    exports com.foo.bar.alpha;
+    exports com.foo.bar.beta;
 }
 ----
 
-=== Declaring outputs
+=== A module
 
-[source,java]
-----
-public class ShadedJar extends DefaultTask {
-   ...
+* Declares dependencies onto other modules
+** optionally transitive (`transitive`)
+* Declares a list of packages it exports
+* will be found on _modulepath_
+* declares services
 
-   @OutputFile
-   File getJarFile() { ... }
-}
-----
+== Why it's going to break your apps
 
-=== Know why your task is out-of-date
+* Exports are package based
+* A non-exported package is not visible to consumers
+* 2 modules cannot export the same packages
+* 2 modules cannot have the same internal packages
 
-image::task-out-of-date.png[height=415]
+Death to *split packages*.
 
-=== Incremental task inputs
+== Gradle support for Java 9
 
-* Know precisely _which_ files have changed
-* Task action can perform the minimal amount of work
+* Bad news: limited
+* Good news: it works!
 
-=== Incremental task inputs
+=== What Gradle supports
 
-[source,java]
-----
-@TaskAction
-public void execute(IncrementalTaskInputs inputs) {
-   if (!inputs.isIncremental()) {
-      // clean build, for example
-      // ...
-   } else {
-      inputs.outOfDate(change ->
-         if (change.isAdded()) {
-           ...
-         } else if (change.isRemoved()) {
-           ...
-         } else {
-            ...
-         }
-      });
-   }
-}
-----        
+* Running on Java 9
+* Cross-compiling
+** Gradle runs on JDK 8
+** Gradle builds using JDK 9
+* No built-in support for modulepath
+* But we can help!
 
-[background-color="#01303a"]
-== Compile avoidance
+== The Java Library plugin
 
-=== Compile classpath leakage
+* Introduced in Gradle 3.4
+* Aimed at Java Libraries
+* Separates API and implementation dependencies
 
-[state=show-dep-graph0]
-=== A typical dependency graph
+=== API dependencies
 
-++++
-<div id="cy0" class="drawing"></div>
+* Form part of the API of the library
+* Typically: method parameters, interfaces, superclasses, ...
 
-<script>
-addDependencyGraph(0, function() {});
-</script>
+=== Implementation dependencies
 
-++++
+* Used "internally"
+* Shouldn't leak to compile classpath of consumers
+* Implementation detail
 
-[state=show-dep-graph1]
-=== Cascading recompilation
-
-++++
-<div id="cy1" class="drawing"></div>
-
-<script>
-addDependencyGraph(1, function(cy) {
-   var highlightNextEle = function(elts){     
-       for (i=0; i<elts.length; i++) {
-          elts[i].addClass('highlighted');
-          var incomingEdges = elts[i].incomers('edge');
-          (function(incomingEdges) {
-             setTimeout(function() { 
-                for (j=0; j<incomingEdges.length; j++) {
-                   incomingEdges[j].addClass('highlighted');
-                };
-                highlightNextEle(incomingEdges.sources()); 
-             }, 1000);
-          })(incomingEdges);
-       }
-       
-     
-   };
-
-   // kick off first highlight
-   highlightNextEle(cy.$('#i'));
-});
-</script>
-
-++++
-
-=== Cascading recompilation
-
-But also with side effects:
-
-* compile dependencies _leak_ to the downstream consumers
-* hard to upgrade dependencies without breaking clients
-
-[background-color="#01303a"]
-== Separating API and implementation
-
-=== Example
-
-[source,java]
-----
-import com.acme.model.Person;
-import com.google.common.collect.ImmutableSet;
-import com.google.common.collect.Iterables;
-
-...
-
-public Set<String> getNames(Set<Person> persons) {
-   return ImmutableSet.copyOf(Iterables.transform(persons, TO_NAME))
-}
-----
-
-=== Before Gradle 3.4
-
-[source,groovy]
-----
-apply plugin: 'java'
-
-dependencies {
-   compile project(':model')
-   compile 'com.google.guava:guava:18.0'
-}
-----
-
-=== But...
-
-[source,java]
-----
-// exported dependency
-import com.acme.model.Person; 
-// internal dependencies
-import com.google.common.collect.ImmutableSet; 
-import com.google.common.collect.Iterables;
-
-...
-
-public Set<String> getNames(Set<Person> persons) {
-   return ImmutableSet.copyOf(
-            Iterables.transform(persons, TO_NAME))
-}
-----
-
-=== Starting from Gradle 3.4
+== Usage
 
 [source,groovy]
 ----
@@ -264,469 +126,478 @@ dependencies {
 }
 ----
 
-[state=show-dep-graph2]
-=== API vs impl graph
+== The StoryTeller application
 
-++++
-<div id="cy2" class="drawing"></div>
+* Built with Java 8 (hence no modules)
+* 6 "modules"
+** `fairy` - Entry point to the storyteller java application
+** `tale` - public `Tale` interface.
+** `formula` - makes it easy to weave a `Tale`
+** `actors` - represents the characters in a fairy tale.
+** `pigs` - produces an instance of `Tale` which represents the story of the three little pigs.
+** `bears` - produces an instance of `Tale` which represents the story of Goldilocks and the three bears.
 
-<script>
-addDependencyGraph(2, function(cy) {
-   var api = cy.filter('edge[kind="api"]');
-   for (i=0; i<api.length; i++) {
-      api[i].addClass('api');
-   }
-});
-</script>
+=== Dependency graph
 
-++++
+image::project-graph.png[height=500px]
 
-[state=show-dep-graph3]
-=== Change to impl dependency
+=== Fairy: StoryTeller
 
-++++
-
-<div id="cy3" class="drawing"></div>
-
-<script>
-addDependencyGraph(3, function(cy) {
-   var api = cy.filter('edge[kind="api"]');
-   for (i=0; i<api.length; i++) {
-      api[i].addClass('api');
-   }
-   var highlightNextEle = function(elts){     
-       for (i=0; i<elts.length; i++) {
-          (function(node) {
-             var incomingEdges = node.incomers('edge');
-             (function(incomingEdges) {
-                setTimeout(function() { 
-                   node.addClass('highlighted');
-                   for (j=0; j<incomingEdges.length; j++) {
-                      incomingEdges[j].addClass('highlighted');
-                      incomingEdges[j].source().addClass('highlighted');
-                   };
-                   //highlightNextEle(incomingEdges.sources()); 
-                }, 1000);
-             })(incomingEdges);
-          })(elts[i]);
-       }
-       
-     
-   };
-
-   // kick off first highlight
-   highlightNextEle(cy.$('#i'));
-});
-</script>
-
-++++
-
-[state=show-dep-graph4]
-=== Change to API dependency
-
-++++
-
-<div id="cy4" class="drawing"></div>
-
-<script>
-addDependencyGraph(4, function(cy) {
-   var api = cy.filter('edge[kind="api"]');
-   for (i=0; i<api.length; i++) {
-      api[i].addClass('api');
-   }
-   var highlightNextEle = function(elts){     
-       for (i=0; i<elts.length; i++) {
-          (function(node) {
-             var incomingEdges = node.incomers('edge[kind="api"]');
-             (function(incomingEdges) {
-                setTimeout(function() { 
-                   node.addClass('highlighted');
-                   for (j=0; j<incomingEdges.length; j++) {
-                      incomingEdges[j].removeClass('api');
-                      incomingEdges[j].addClass('highlighted');
-                      incomingEdges[j].source().addClass('highlighted');
-                   };
-                   highlightNextEle(incomingEdges.sources()); 
-                }, 1000);
-             })(incomingEdges);
-          })(elts[i]);
-       }
-       
-     
-   };
-
-   // kick off first highlight
-   highlightNextEle(cy.$('#h'));
-});
-</script>
-
-++++
-
-[background-color="#01303a"]
-== Consumers are not equal
-
-=== Compile classpath
-
-What does a *compiler* care about?
-
-[%step]
-* Input: jars, or class directories
-* Jar: class files
-* Class file: both API and implementation
-
-=== Compile classpath
-
-What we provide to the compiler
-
-```
-public class Foo {
-    private int x = 123;
-    
-    public int getX() { return x; }
-    public int getSquaredX() { return x * x; }
-}
-```
-
-=== Compile classpath
-
-What the compiler cares about:
-
-```
-public class Foo {
-    public int getX()
-    public int getSquaredX()
-}
-```
-
-=== Compile classpath
-
-But it could also be
-
-```
-public class Foo {
-    public int getSquaredX()
-    public int getX()
-}
-```
-
-**only public signatures matter**
-
-=== Compile classpath snapshotting
-
-[%step]
-* Compute a hash of the signature of class : `aedb00fd`
-* Combine hashes of all classes : `e45bdc17`
-* Combine hashes of all input on classpath: `4500fc1`
-* Result: hash of the compile classpath
-* Only consists of what is _relevant_ to the `javac` compiler
-
-=== Runtime classpath
-
-What does the runtime care about?
-
-=== Runtime classpath
-
-What does the runtime care about:
-
-```
-public class Foo {
-    private int x = 123;
-    
-    public int getX() { return x; }
-    public int getSquaredX() { return x * x; }
-}
-```
-
-At runtime, *everything* matters, from classes to resources.
-
-=== Compile vs runtime classpath
-
-In practice:
-
-[source,java]
+[source, java]
 ----
-@InputFiles
-@CompileClasspath
-FileCollection getCompileClasspath() { ... }
+package org.gradle.fairy.app;
 
-@InputFiles
-@Classpath
-FileCollection getRuntimeClasspath() { ... }
-----
-
-=== Compile avoidance
-
-* _compile_ and _runtime_ classpath have different _semantics_
-* Gradle makes the difference
-* Ignores irrelevant (non ABI) changes to compile classpath
-
-[state=show-dep-graph5]
-=== Effect on recompilations
-
-++++
-
-<div id="cy5" class="drawing"></div>
-
-<script>
-addDependencyGraph(5, function(cy) {
-   var api = cy.filter('edge[kind="api"]');
-   for (i=0; i<api.length; i++) {
-      api[i].addClass('api');
-   }
-   var highlightNextEle = function(elts, depth){     
-       if (depth>=1) { return; }
-       for (i=0; i<elts.length; i++) {
-          (function(node) {
-             var incomingEdges = node.incomers('edge[kind="api"]');
-             (function(incomingEdges) {
-                setTimeout(function() { 
-                   node.addClass('highlighted');
-                   for (j=0; j<incomingEdges.length; j++) {
-                      incomingEdges[j].removeClass('api');
-                      incomingEdges[j].addClass('highlighted');
-                      incomingEdges[j].source().addClass('highlighted');
-                   };
-                   highlightNextEle(incomingEdges.sources(), depth+1); 
-                }, 1000);
-             })(incomingEdges);
-          })(elts[i]);
-       }
-       
-     
-   };
-
-   // kick off first highlight
-   highlightNextEle(cy.$('#h'), 0);
-});
-</script>
-
-++++
-
-=== Icing on the cake
-
-* Upgrade a dependency from `1.0.1` to `1.0.2`
-* If ABI hasn't changed, Gradle will _not_ recompile
-* Even if the name of the jar is different (`mydep-1.0.1.jar` vs `mydep-1.0.2.jar`)
-* Because only _contents_ matter
-
-[background-color="#01303a"]
-== Incremental compilation
-
-== Basics
-
-* Given a set of source files
-* Only compile the files which have changed...
-* and their dependencies
-* Language specific
-
-=== Gradle has support for incremental compilation of Java
-
-```
-compileJava {
-    //enable incremental compilation
-    options.incremental = true
-}
-```
-
-NOTE: Kotlin plugin implements its own incremental compilation
-
-=== In practice
-
-[source,java]
-----
-import org.apache.commons.math3.complex.Complex;
-
-public class Library {
-    public Complex someLibraryMethod() {
-        return Complex.I;
+public class StoryTeller {
+    public static void main(String[] args) {
+        ServiceLoader<Tale> loader = ServiceLoader.load(Tale.class);
+        if (!loader.iterator().hasNext()) {
+            System.out.println("Alas, I have no tales to tell!");
+        }
+        for (Tale tale : loader) {
+            tale.tell();
+        }
     }
 }
 ----
 
-[%step]
-* `Complex` is a dependency of `Library`
-* if `Complex` is changed, we need to recompile `Library`
-* if `ComplexUtils` is changed, no need to recompile
+=== Fairy: build.gradle
 
-=== Gotcha
+[source,groovy]
+----
+dependencies {
+    implementation project(':tale')
+
+    runtimeOnly project(':pigs')
+    runtimeOnly project(':bears')
+}
+----
+
+=== Formula: build.gradle
+
+
+[source,groovy]
+----
+dependencies {
+    api project(':tale')
+    api project(':actors')
+
+    testImplementation 'junit:junit:4.12'
+}
+----
+
+=== Strong encapsulation breakage
+
+* `ModularityTest` lives in `Formula`
+
+=== Test 1: should always pass
 
 [source,java]
 ----
-import org.apache.commons.math3.dfp.Dfp;
+    @Test
+    public void canReachActor() {
+        Actor actor = Imagination.createActor("Sean Connery");
+        assertEquals("Sean Connery", actor.toString());
+    }
+----
 
-public class LibraryUtils {
-   public static int getMaxExp() {
-      return Dfp.MAX_EXP;
+=== Test 2 : should fail
+
+[source,java]
+----
+    @Test
+    public void canDynamicallyReachDefaultActor() throws Exception {
+        Class clazz = ModularityTest
+            .class.getClassLoader()
+            .loadClass("org.gradle.actors.impl.DefaultActor");
+        Actor actor = (Actor) clazz.getConstructor(String.class)
+            .newInstance("Kevin Costner");
+        assertEquals("Kevin Costner", actor.toString());
+    }
+----
+
+=== Test 3 : should fail
+
+[source,java]
+----
+    @Test
+    public void canReachDefaultActor() {
+        Actor actor = new org.gradle.actors.impl.DefaultActor("Kevin Costner");
+        assertEquals("Kevin Costner", actor.toString());
+    }
+----
+
+=== Test 4 : fails already!
+
+[source,java]
+----
+    @Test
+    public void canReachGuavaClasses() {
+        Set<String> strings = com.google.common.collect.ImmutableSet.of("Hello", "Goodbye");
+        assertTrue(strings.contains("Hello"));
+        assertTrue(strings.contains("Goodbye"));
+    }
+----
+
+=== How does it map to modular Java concepts?
+
+(warning: this is not one to one mapping)
+
+* `implementation` -> requires
+* `api` -> requires _transitive_
+* `runtimeOnly` -> requires _static_
+
+=== Source layout
+
+src/main/java -> your application sources
+src/test/java -> your test sources
+
+* We want to compile main and tests separately
+** It's good for performance
+** It's better for incrementality
+** Problem: one or two modules?
+
+== Let's migrate!
+
+* Bottom-up approach
+* Fully compatible
+* Modules are consumable as regular jars
+
+Let's take advantage of that!
+
+== Migrate the `actors` module
+
+=== Add the module-info descriptor
+
+[source,java]
+----
+module org.gradle.actors {
+    exports org.gradle.actors;
+    requires guava;
+}
+----
+
+=== Compiling the module
+
+[source,groovy]
+----
+ext.moduleName = 'org.gradle.actors'
+
+sourceCompatibility = 9
+targetCompatibility = 9
+
+compileJava {
+    inputs.property("moduleName", moduleName)
+    doFirst {
+        options.compilerArgs = [
+            '--module-path', classpath.asPath,
+        ]
+        classpath = files()
+    }
+}
+----
+
+=== Testing (1/2)
+
+* 2 possible approaches
+** a test module which reads the main module
+** patch module: easier, more compatible, faster
+
+=== Testing (2/3)
+
+[source,groovy]
+----
+compileTestJava {
+    inputs.property("moduleName", moduleName)
+    doFirst {
+        options.compilerArgs = [
+            '--module-path', classpath.asPath,
+            '--add-modules', 'junit',
+            '--add-reads', "$moduleName=junit",
+            '--patch-module', "$moduleName=" + 
+               files(sourceSets.test.java.srcDirs).asPath,
+        ]
+        classpath = files()
+    }
+}
+----
+
+=== Testing (3/3)
+
+[source,groovy]
+----
+test {
+    inputs.property("moduleName", moduleName)
+    doFirst {
+        jvmArgs = [
+            '--module-path', classpath.asPath,
+            '--add-modules', 'ALL-MODULE-PATH',
+            '--add-reads', "$moduleName=junit",
+            '--patch-module', "$moduleName=" + 
+               files(sourceSets.test.java.outputDir).asPath,
+        ]
+        classpath = files()
+    }
+}
+----
+
+== What about the other projects?
+
+* They are still regular jars
+* But we _know_ we're going to migrate them at some point
+
+=== Automatic modules
+
+* When a "legacy" jar is added to _module path_
+* Java infers a module name from the _file name_ (uh!)
+* Unless you _reserve_ a module name
+
+=== Add `Automatic-Module-Name`
+
+=== Module Name
+
+* Add `ext.moduleName = '...'` on each module
+
+=== Configure the jar task
+
+[source,groovy]
+----
+jar {
+    inputs.property("moduleName", moduleName)
+    manifest {
+        attributes('Automatic-Module-Name': moduleName)
+    }
+}
+----
+
+== Everything as a module
+
+=== Cross-configure all projects
+
+
+[source, groovy]
+----
+subprojects {
+    afterEvaluate {
+         ...
+        compileJava {
+            inputs.property("moduleName", moduleName)
+            doFirst {
+                options.compilerArgs = [
+                    '--module-path', classpath.asPath,
+                ]
+                classpath = files()
+            }
+        }
+
+        ...
+    }
+}
+
+----
+
+=== Remove `Automatic-Module-Name`
+
+* No longer required
+
+=== Move to the new service infrastructure
+
+* Replace `META-INF/services` with `module-info`
+
+[source,groovy]
+----
+module org.gradle.fairy.tale.bears {
+    requires org.gradle.actors;
+    requires transitive org.gradle.fairy.tale;
+    requires org.gradle.fairy.tale.formula;
+
+    provides org.gradle.fairy.tale.Tale
+        with org.gradle.fairy.tale.bears.GoldilocksAndTheThreeBears;
+}
+----
+
+== Running the modular application
+
+* Apply the `application` plugin
+* But requires some tweaking...
+
+=== The `run` task
+
+[source,groovy]
+----
+mainClassName = "$moduleName/org.gradle.fairy.app.StoryTeller"
+
+run {
+    inputs.property("moduleName", moduleName)
+    doFirst {
+        jvmArgs = [
+            '--module-path', classpath.asPath,
+            '--module', mainClassName
+        ]
+        classpath = files()
+    }
+}
+----
+
+=== The `startScripts` task
+
+[source,groovy]
+----
+startScripts {
+    inputs.property("moduleName", moduleName)
+    doFirst {
+        classpath = files()
+        defaultJvmOpts = [
+            '--module-path', 'APP_HOME_LIBS',
+            '--module', mainClassName
+        ]
+    }
+    doLast{
+        // ... snip ...
+    }
+}
+----
+
+== Multi-release jars
+
+=== Goal
+
+* Provide several versions of the same class for runtime
+
+=== Disclaimer
+
+Don't do this at home
+
+=== Cross-compilation
+
+* Running Gradle on Java 9 doesn't mean you need to use it
+* You can target different compilers
+
+=== Sources setup
+
+* `src/main/java` : shared sources
+* `src/main/java9` : Java 9 specific sources
+
+=== Add a source set
+
+[source,groovy]
+----
+sourceSets {
+   java9 {
+      java {
+       srcDirs = ['src/main/java9']
+      }
    }
 }
 ----
 
-[%step]
-* `Dfp` is a dependency of `LibraryUtils`
-* so if `MAX_EXP` changes, we should recompile `LibraryUtils`, right?
-
-=== Wait a minute...
-
-> `javap -v build/classes/java/main/LibraryUtils.class`
-
-```
-...
-  public static int getMaxExp();
-    descriptor: ()I
-    flags: ACC_PUBLIC, ACC_STATIC
-    Code:
-      stack=1, locals=0, args_size=0
-         0: ldc           #3                  // int 32768
-         2: ireturn
-```
-
-* reference to `Dfp` is gone!
-* compiler _inlines_ some constants
-* JLS says compiler doesn't have to add the dependent class to constant pool
-
-=== What Gradle does
-
-[%step]
-* Analyze all _bytecode_ of all classes
-* Record which constants are used in which file
-* Whenever a producer changes, check if a _constant_ changed
-* If yes, recompile _everything_
-
-== Annotation processors
-
-[%step]
-* Disable incremental compilation (working on it!)
-* Implementation of the annotation processors matter at compile time
-* Don't add annotation processors to _compile classpath_
-* or we cannot use smart classpath snapshotting
-
-== Annotation processors
-
-Use `annotationProcessorPath`:
+=== Configure language level
 
 [source,groovy]
 ----
-configurations {
-    apt
-}
-dependencies {
-    // The dagger compiler and its transitive dependencies will only be found on annotation processing classpath
-    apt 'com.google.dagger:dagger-compiler:2.8'
-
-    // And we still need the Dagger annotations on the compile classpath itself
-    compileOnly 'com.google.dagger:dagger:2.8'
-}
-
 compileJava {
-    options.annotationProcessorPath = configurations.apt
+   sourceCompatibility = 8
+   targetCompatibility = 8
+}
+
+compileJava9Java {
+   sourceCompatibility = 9
+   targetCompatibility = 9
 }
 ----
 
-[background-color="#01303a"]
-== Variant aware dependency management
+=== Add dependency on shared sources
 
-=== Producer vs consumer
+[source,groovy]
+----
+dependencies {
+    java9Implementation files(sourceSets.main.output.classesDirs) { 
+       builtBy compileJava 
+    }
+}
+----
 
-[%step]
-* A `consumer` _depends on_ a `producer`
-* There are multiple requirements
-** What is required to compile against a `producer`?
-** What is required at _runtime_ for a specific configuration?
-** What artifacts does the producer offer?
-** Is the `producer` a sub-project or an external component?
+=== Configuring the MRjar
 
-=== What do you need to compile against a component?
+[source,groovy]
+----
+jar {
+   into('META-INF/versions/9') {
+      from sourceSets.java9.output
+   }
+   manifest.attributes(
+      'Multi-Release': 'true', 
+      'Main-Class': 'com.acme.JdkSpecific'
+   )
+}
+----
 
-* Class files
-* Can be found in different forms:
-** class directories
-** jars
-** aars, ...
+=== Setting up a run task
 
-*Question*: do we need to build a jar of the producer if all we want is to compile against it?
+[source,groovy]
+----
+task run(type: JavaExec) {
+   dependsOn jar
+   classpath files(jar.archivePath)
+   main = 'com.acme.JdkSpecific'
+}
+----
 
-=== Discriminate thanks to _usage_
+=== The `--release` flag
 
-[quote, Consumer]
-____
-Give me something that I can use to compile
-____
+* Fixes `bootclasspath` that no-one uses
+* Available since JDK 9
+* Compiles against the *right* API
+* Gradle will **not** add `-source`/`-target`
+** Only if `--release` is present
 
-=== Discriminate thanks to _usage_
+=== Configuring compile tasks
 
-[quote, Producer]
-____
-Sure, here's a jar
-____
+[source,groovy]
+----
+project.afterEvaluate {
+   tasks.withType(JavaCompile) {
+      def version = compat(sourceCompatibility)
+      options.compilerArgs.addAll(['--release', version])
+   }
+}
+----
 
-=== Discriminate thanks to _usage_
+== jlink
 
-But we can be finer:
+* Allows building minimal runtime images
+* requires **full modularization**
+** including transitive dependencies
+** hence not relevant in this example (Guava)
 
-[quote, Producer]
-____
-Sure, here's a class directory
-____
+=== No built-in task (yet)
 
-=== Discriminate thanks to _usage_
-
-Or smarter:
-
-[quote, Producer]
-____
-mmm, all I have is an AAR, but don't worry, I know how to transform it to something you can use for compile
-____
-
-
-=== The Java Library Plugin
-
-* will provide consumers with a _class directory_ for compile
-* will provide consumers with a _jar_ for runtime
-
-As a consequence:
-
-* only `classes` task will be triggerred when compiling
-* `jar` (and therefore `processResources`) only triggerred when needed at runtime
+[source,groovy]
+----
+task jlink(type:Exec) {
+   ext.outputDir = file("$buildDir/jlink")
+   inputs.files(configurations.runtimeClasspath)
+   inputs.files(jar.archivePath)
+   outputs.dir(outputDir)
+   dependsOn jar
+   doFirst {
+      outputDir.deleteDir()
+      commandLine '$javaHome/bin/jlink',
+           '--module-path', 
+           "$javaHome/jmods/:${configurations.runtimeClasspath.asPath}:${jar.archivePath}",
+           '--add-modules', moduleName,
+           '--output', outputDir
+    
+    }
+}
+----
 
 [background-color="#01303a"]
 == Conclusion
 
-=== Use the Java Library Plugin!
+=== Conclusion
 
-++++
-<div id="chart"></div>
-<script>
-dependencyGraphs.push(function() {
-   var chart = c3.generate({
-       data: {
-           rows: [
-            ['Scenario','Maven 3.3.9','Gradle 3.3','Gradle 4.0'],
-            ['Large project 1 change',20.80,13.10,1.30],
-            ['Medium project 1 change',5.70,1.30,0.26],
-            ['Multi project ABI-breaking change',26.80,15.80,3.30],
-            ['Multi project ABI-compatible change',26.80,16.30,1.40]],
-           type: 'bar',
-           x: 'Scenario',
-           labels: true
-       },
-       axis: {
-           x: {
-               type: 'category'
-           },
-           y: {
-               label: 'seconds'
-           }
-       },
-       legend: {
-          position: 'right'
-       }
-   });
-});
-</script>
-++++
-
-Slides: https://melix.github.io/gradle-summit-2017-max-incremental
-Discuss: @CedricChampeau
+* Slides: https://melix.github.io/javaone-2017-jigsaw
+* Discuss: @CedricChampeau
 
 [%notitle]
 == Thanks

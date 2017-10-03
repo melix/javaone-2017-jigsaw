@@ -25,7 +25,7 @@ asciidoctor {
             'idprefix': '',
             'idseparator': '-',
             'basedir': projectDir,
-            'docinfo1': 'true',
+            'docinfo1': '',
             'width': 1280,
             'height': 720,
             'project-version': '1.0',
@@ -46,6 +46,11 @@ asciidoctor {
   </script>
 """ 
         }
+    }
+    
+    doLast {
+        file("$buildDir/asciidoc/revealjs/index.html").text =
+           file("$buildDir/asciidoc/revealjs/index.html").text.replace('</head>', "${file('src/docs/asciidoc/docinfo.html').text}</head>")
     }
 
 }
