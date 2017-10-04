@@ -1,16 +1,15 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8" /><meta name="author" content="Cédric Champeau (@CedricChampeau), Gradle" /><title>Extremely fast builds with Gradle 3</title><meta content="yes" name="apple-mobile-web-app-capable" /><meta content="black-translucent" name="apple-mobile-web-app-status-bar-style" /><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, minimal-ui" name="viewport" /><link href="reveal.js/css/reveal.css" rel="stylesheet" /><link rel="stylesheet" href="reveal.js/css/theme/summit.css" id="theme" /><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.3.0/css/font-awesome.min.css" /><link href="reveal.js/lib/css/zenburn.css" rel="stylesheet" /><script>document.write( '<link rel="stylesheet" href="reveal.js/css/print/' + ( window.location.search.match( /print-pdf/gi ) ? 'pdf' : 'paper' ) + '.css" type="text/css" media="print">' );</script><link rel="stylesheet" type="text/css" href="reveal.js/css/theme/asciinema-player.css" />
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8" /><meta name="author" content="Cédric Champeau (@CedricChampeau), Gradle" /><title>: Building and testing Java 9 applications with Gradle</title><meta content="yes" name="apple-mobile-web-app-capable" /><meta content="black-translucent" name="apple-mobile-web-app-status-bar-style" /><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, minimal-ui" name="viewport" /><link href="reveal.js/css/reveal.css" rel="stylesheet" /><link rel="stylesheet" href="reveal.js/css/theme/summit.css" id="theme" /><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.3.0/css/font-awesome.min.css" /><link href="reveal.js/lib/css/zenburn.css" rel="stylesheet" /><script>document.write( '<link rel="stylesheet" href="reveal.js/css/print/' + ( window.location.search.match( /print-pdf/gi ) ? 'pdf' : 'paper' ) + '.css" type="text/css" media="print">' );</script><link rel="stylesheet" type="text/css" href="reveal.js/css/theme/asciinema-player.css" />
 <link rel="stylesheet" type="text/css" href="reveal.js/css/theme/github-gist.css" />
-<script src="reveal.js/css/theme/asciinema-player.js"></script></head><body><div class="reveal"><div class="slides"><section class="title" data-state="title"><div id="front-top">Paris Android User Group</div><div id="front-title">Extremely fast builds with Gradle 3 <br> Cédric Champeau</div><div id="front-date">Feb 2017</div><p class="author"><small>Cédric Champeau (@CedricChampeau), Gradle</small></p></section><section id="who-am-i" data-background-image="./images/nantes.jpg" data-background-size="cover"><h2>Who am I</h2>
-<style>
-.asciinema-terminal.font-medium {
-  font-size: 16px;
-}
-</style>
+<script src="reveal.js/css/theme/asciinema-player.js"></script>
+<script src="reveal.js/css/theme/cytoscape.min.js"></script>
+<script src="https://cdn.rawgit.com/cpettitt/dagre/v0.7.4/dist/dagre.min.js"></script>
+<script src="https://cdn.rawgit.com/cytoscape/cytoscape.js-dagre/1.5.0/cytoscape-dagre.js"></script>
+<script src="reveal.js/css/theme/dependency-graph.js"></script>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/c3/0.4.11/c3.min.css" rel="stylesheet" type="text/css"/> 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/3.5.4/d3.min.js" charset="utf-8"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/c3/0.4.11/c3.min.js"></script>
 
-<div class="pictureWrapper">
-   <div class="picture"><img src="images/mini-me.png"></div>
-</div>
-<div class="listingblock"><div class="content"><pre class="highlight"><code class="groovy language-groovy">speaker {
+</head><body><div class="reveal"><div class="slides"><section class="title" data-state="title" data-transition="zoom" data-transition-speed="fast" data-background-image="./images/title.jpeg"><h1></h1><h2>Building and testing Java 9 applications with Gradle</h2><p class="author"><small>Cédric Champeau (@CedricChampeau), Gradle</small></p></section><section id="who-am-i"><h2>Who am I</h2><div class="listingblock"><div class="content"><pre class="highlight"><code class="groovy language-groovy">speaker {
     name 'Cédric Champeau'
     company 'Gradle Inc'
     oss 'Apache Groovy committer',
@@ -25,87 +24,212 @@
         extraDescription '''Groovy in Action 2 co-author
 Misc OSS contribs (Gradle plugins, deck2pdf, jlangdetect, ...)'''
 }</code></pre></div></div></section>
-<section id="agenda"><h2>Agenda</h2><div class="ulist"><ul><li><p>The Gradle Daemon</p></li><li><p>Profiling</p></li><li><p>Incremental builds</p></li><li><p>Incremental compilation</p></li><li><p>Continuous builds</p></li><li><p>Composite builds</p></li><li><p>Build cache</p></li></ul></div></section>
-<section id="gradle-android"><h2>Gradle != Android</h2></section>
-<section id="what-is-gradle"><h2>What is Gradle?</h2><div class="ulist"><ul><li><p>A build tool</p></li><li><p>Cloud Services</p></li></ul></div></section>
-<section id="the-gradle-daemon"><h2>The Gradle daemon</h2><div class="ulist"><ul><li><p>Long-lived background process</p></li><li><p>Listens and executes build actions</p></li><li><p>Faster startup / execution</p></li><li><p>Enabled by default since 3.0</p></li></ul></div></section>
-<section><section id="the-gradle-daemon-2"><h2>The Gradle daemon</h2></section><section id="cold-daemon"><h2>Cold daemon</h2><div class="imageblock" style=""><img src="./images/daemon-keynote-cold.gif" alt="daemon keynote cold" /></div></section><section id="warm-daemon"><h2>Warm daemon</h2><div class="imageblock" style=""><img src="./images/daemon-keynote-warm.gif" alt="daemon keynote warm" /></div></section></section>
-<section id="profiling-a-build"><h2>Profiling a build</h2><div class="paragraph"><p><code>gradle --profile</code></p></div>
-<div class="ulist"><ul><li><p>Generates a report in the build directory</p></li><li><p>Limited insight</p></li><li><p>Not easily shareable</p></li><li><p>But can already give precious information</p></li></ul></div></section>
-<section id="build-scans"><h2>Build scans</h2><table class="tableblock frame-all grid-all" style="width:100%"><colgroup><col style="width:50%" /><col style="width:50%" /></colgroup><tbody><tr><td class="tableblock halign-left valign-top"><div><div class="ulist"><ul><li><p>First member of the Cloud Services family</p></li><li><p>Insights into your build</p></li><li><p>View and share via URL</p></li><li><p>Debug, optimize and refine</p></li><li><p>Analyze <em>all</em> of your builds</p></li><li><p>Available for free</p></li></ul></div></div></td><td class="tableblock halign-left valign-top"><div><div class="paragraph"><p><span class="image"><img src="./images/build-scans.png" alt="build scans" /></span></p></div></div></td></tr></tbody></table></section>
-<section id="build-scan-demo"><h2>Build scan demo</h2><div class="paragraph"><p><a href="https://scans.gradle.com/s/cmihj7rsqszle" class="bare">https://scans.gradle.com/s/cmihj7rsqszle</a>
-<a href="https://scans.gradle.com/s/cxwz7amaxhcdc" class="bare">https://scans.gradle.com/s/cxwz7amaxhcdc</a>
-<a href="https://scans.gradle.com/s/ly5tnqtuoqlwe" class="bare">https://scans.gradle.com/s/ly5tnqtuoqlwe</a>
-<a href="https://scans.gradle.com/s/7ftlptyifoqna" class="bare">https://scans.gradle.com/s/7ftlptyifoqna</a> (Android)</p></div></section>
-<section><section id="creating-a-build-scan"><h2>Creating a build scan</h2></section><section id="apply-the-build-scan-plugin"><h2>Apply the build scan plugin</h2><div class="listingblock"><div class="content"><pre class="highlight"><code class="groovy language-groovy">plugins {
-    id 'com.gradle.build-scan' version '1.6'
-}
+<section id="agenda"><h2>Agenda</h2><div class="ulist"><ul><li><p>What are Java 9 modules?</p></li><li><p>Migrating an existing app to modules</p></li><li><p>Running tests</p></li><li><p>(bonus!) multi-release jars</p></li><li><p>(extra time!) minimal runtime images</p></li></ul></div></section>
+<section id="jpms-aka-modules-for-java"><h2>JPMS aka Modules for Java</h2><div class="ulist"><ul><li><p>Modularity for the Java platform</p><div class="ulist"><ul><li><p><strong>Reliable configuration</strong> (goodbye <em>classpath</em>)</p></li><li><p><strong>Strong encapsulation</strong> (goodbye <em>com.sun</em>)</p></li></ul></div></li><li><p>Enforce strict boundaries between modules</p><div class="ulist"><ul><li><p>compile-time</p></li><li><p>run-time</p></li></ul></div></li></ul></div></section>
+<section><section id="java-9-modules" data-background-color="#01303a"><h2>Java 9 modules</h2></section><section id="declaring-a-module"><h2>Declaring a module</h2><div class="listingblock"><div class="title">module-info.java</div><div class="content"><pre class="highlight"><code class="java language-java">module com.foo.bar {
+    requires org.baz.qux;
+    exports com.foo.bar.alpha;
+    exports com.foo.bar.beta;
+}</code></pre></div></div></section><section id="a-module"><h2>A module</h2><div class="ulist"><ul><li><p>Declares dependencies onto other modules</p><div class="ulist"><ul><li><p>optionally transitive</p></li></ul></div></li><li><p>Declares a list of packages it exports</p></li><li><p>will be found on <em>modulepath</em></p></li><li><p>optionally declares services</p></li></ul></div></section></section>
+<section id="why-it-s-going-to-break-your-apps"><h2>Why it&#8217;s going to break your apps</h2><div class="ulist"><ul><li><p>Exports are package based</p></li><li><p>A non-exported package is not visible to consumers</p></li><li><p>2 modules cannot export the same packages</p></li><li><p>2 modules cannot have the same internal packages</p></li></ul></div>
+<div class="paragraph"><p>Death to <strong>split packages</strong>.</p></div></section>
+<section><section id="gradle-support-for-java-9"><h2>Gradle support for Java 9</h2><div class="ulist"><ul><li><p>Good news: it works!</p></li><li><p>Sad news: limited (but in progress)</p></li></ul></div></section><section id="what-gradle-supports"><h2>What Gradle supports</h2><div class="ulist"><ul><li><p>Running on Java 9</p></li><li><p>Cross-compiling</p><div class="ulist"><ul><li><p>Gradle runs on JDK 8</p></li><li><p>Gradle builds using JDK 9</p></li></ul></div></li><li><p>No built-in support for modulepath</p></li><li><p>But we can help!</p></li></ul></div></section><section id="warning"><h2>Warning</h2><div class="ulist"><ul><li><p>Some plugins don&#8217;t work</p><div class="ulist"><ul><li><p>eg FindBugs</p></li></ul></div></li></ul></div></section></section>
+<section><section id="the-java-library-plugin" data-background-color="#01303a"><h2>The Java Library plugin</h2></section><section id="the-java-library-plugin-2"><h2>The Java Library plugin</h2><div class="ulist"><ul><li><p>Introduced in Gradle 3.4</p></li><li><p>Aimed at Java libraries</p></li><li><p>Separates API and implementation dependencies</p></li></ul></div></section><section id="api-dependencies"><h2>API dependencies</h2><div class="ulist"><ul><li><p>Form part of the API of the library</p></li><li><p>Typically: method parameters, interfaces, superclasses, &#8230;&#8203;</p></li></ul></div></section><section id="implementation-dependencies"><h2>Implementation dependencies</h2><div class="ulist"><ul><li><p>Used "internally"</p></li><li><p>Shouldn&#8217;t leak to compile classpath of consumers</p></li><li><p>Implementation detail</p></li></ul></div></section></section>
+<section id="usage"><h2>Usage</h2><div class="listingblock"><div class="content"><pre class="highlight"><code class="groovy language-groovy">// This component has an API and an implementation
+apply plugin: 'java-library'
 
-buildScan {
-    licenseAgreementUrl = 'https://gradle.com/terms-of-service'
-    licenseAgree = 'yes'
-}</code></pre></div></div></section><section id="run-the-build"><h2>Run the build</h2><div class="listingblock"><div class="content"><pre class="highlight"><code>./gradlew --scan build</code></pre></div></div></section><section id="click-on-the-link"><h2>Click on the link</h2><div class="listingblock"><div class="content"><pre class="highlight"><code>:jrubyPrepareGems
-:asciidoctor UP-TO-DATE
-
-BUILD SUCCESSFUL
-
-Total time: 1.132 secs
-
-Publishing build information...
-https://gradle.com/s/v2f5knnujnsx2</code></pre></div></div></section></section>
-<section><section id="incremental-builds"><h2>Incremental builds</h2><div class="ulist"><ul><li><p>Gradle is meant for incremental builds</p></li><li><p><code>clean</code> is a waste of time</p></li><li><p>Prepare your builds for incrementalness</p></li></ul></div></section><section id="example-building-a-shaded-jar"><h2>Example: building a shaded jar</h2><div class="listingblock"><div class="content"><pre class="highlight"><code class="groovy language-groovy">task shadedJar(type: ShadedJar) {
-   jarFile = file("$buildDir/libs/shaded.jar")
-   classpath = configurations.runtime
-   mapping = ['org.apache': 'shaded.org.apache']
-}</code></pre></div></div>
-<div class="ulist"><ul><li><p>What are the task inputs?</p></li><li><p>What are the task outputs?</p></li><li><p>What if one of them changes?</p></li></ul></div></section><section id="declaring-inputs"><h2>Declaring inputs</h2><div class="listingblock"><div class="content"><pre class="highlight"><code class="groovy language-groovy">@InputFiles
-FileCollection getClasspath() { ... }
-
-@Input
-Map&lt;String, String&gt; getMapping() { ... }</code></pre></div></div></section><section id="declaring-outputs"><h2>Declaring outputs</h2><div class="listingblock"><div class="content"><pre class="highlight"><code class="groovy language-groovy">@OutputFile
-File getJarFile() { ... }</code></pre></div></div></section></section>
-<section><section id="incremental-compilation"><h2>Incremental compilation</h2><div class="ulist"><ul><li><p>Given a set of source files</p></li><li><p>Only compile the files which have changed&#8230;&#8203;</p></li><li><p>and their dependencies</p></li><li><p>Language specific</p></li></ul></div></section><section id="gradle-has-support-for-incremental-compilation-of-java"><h2>Gradle has support for incremental compilation of Java</h2><div class="listingblock"><div class="content"><pre class="highlight"><code>compileJava {
-    //enable incremental compilation
-    options.incremental = true
-}</code></pre></div></div>
-<div class="imageblock" style=""><img src="./images/gradle-3.4-perf.png" alt="gradle 3.4 perf" /></div></section></section>
-<section id="gradle-3-4"><h2>Gradle 3.4</h2><div class="paragraph"><p><a href="https://blog.gradle.org/incremental-compiler-avoidance" class="bare">https://blog.gradle.org/incremental-compiler-avoidance</a></p></div></section>
-<section id="continuous-builds"><h2>Continuous builds</h2><div class="ulist"><ul><li><p>Gradle watches for changes in task inputs</p></li><li><p>Re-executes tasks as changes occur</p></li><li><p>Enabled with <code>-t</code></p></li></ul></div>
-<div class="listingblock"><div class="content"><pre class="highlight"><code>gradle -t asciidoctor</code></pre></div></div></section>
-<section><section id="compile-avoidance"><h2>Compile avoidance</h2></section><section id="compile-classpath-vs-runtime-classpath"><h2>Compile classpath vs runtime classpath</h2><div class="ulist"><ul><li><p>Gradle makes the difference</p></li><li><p>Ignores irrelevant (non ABI) changes to compile classpath</p></li></ul></div></section><section id="usage"><h2>Usage</h2><div class="listingblock"><div class="content"><pre class="highlight"><code class="java language-java">import com.acme.model.Person;
-import com.google.common.collect.ImmutableSet;
-import com.google.common.collect.Iterables;
-
-...
-
-public Set&lt;String&gt; getNames(Set&lt;Foo&gt; persons) {
-   return ImmutableSet.copyOf(Iterables.transform(persons, TO_NAME))
-}</code></pre></div></div></section><section id="declaring-dependencies"><h2>Declaring dependencies</h2><div class="listingblock"><div class="content"><pre class="highlight"><code class="groovy language-groovy">dependencies {
-   compile project(':model')
-   compile 'com.google.guava:guava:18.0'
-}</code></pre></div></div></section><section id="but"><h2>But&#8230;&#8203;</h2><div class="listingblock"><div class="content"><pre class="highlight"><code class="java language-java">import com.acme.model.Person; // exported dependency
-import com.google.common.collect.ImmutableSet; // internal dependency
-import com.google.common.collect.Iterables; // internal dependency
-
-...
-
-public Set&lt;String&gt; getNames(Set&lt;Foo&gt; persons) {
-   return ImmutableSet.copyOf(Iterables.transform(persons, TO_NAME))
-}</code></pre></div></div></section><section id="separating-api-from-implementation"><h2>Separating API from implementation</h2><div class="listingblock"><div class="content"><pre class="highlight"><code class="groovy language-groovy">dependencies {
+dependencies {
    api project(':model')
    implementation 'com.google.guava:guava:18.0'
-}</code></pre></div></div></section><section id="benefit"><h2>Benefit</h2><div class="ulist"><ul><li><p>No more compile classpath leakage</p></li><li><p>Downstream dependencies not recompiled when internal dependency changes</p></li></ul></div></section></section>
-<section id="composite-builds"><h2>Composite builds</h2><div class="ulist"><ul><li><p><em>Compose</em> various projects as if there were one</p><div class="ulist"><ul><li><p>Each project can live in its own repository</p></li><li><p>Each project has its own Gradle build</p></li><li><p>Composition unites them through <em>dependency resolution</em></p></li></ul></div></li><li><p><em>Split</em> monolithic projects</p><div class="ulist"><ul><li><p>For large multiproject builds, allows splitting them into several pieces</p></li><li><p>Each piece can be versioned independently</p></li><li><p>Developers can <em>choose</em> what subprojects they care about</p></li></ul></div></li></ul></div></section>
-<section id="composite-builds-demo"><h2>Composite builds demo</h2></section>
-<section id="what-s-next"><h2>What&#8217;s next?</h2></section>
-<section id="build-cache"><h2>Build cache</h2><div class="ulist"><ul><li><p>Avoid doing work even after <em>clean</em></p></li><li><p>Share binaries between projects on a single machine</p></li><li><p>Share binaries between projects on a network</p></li><li><p>Backend agnostic</p></li></ul></div></section>
-<section id="build-cache-use-cases"><h2>Build cache use cases</h2><div class="ulist"><ul><li><p>Long compile tasks</p></li><li><p>Bisecting</p></li><li><p>Continuous integration</p></li><li><p>Green Earth ;)</p></li></ul></div></section>
-<section id="what-about-android"><h2>What about Android?</h2><div class="paragraph"><p><a href="http://tools.android.com/tech-docs/new-build-system/2-5-alpha-gradle-plugin" class="bare">http://tools.android.com/tech-docs/new-build-system/2-5-alpha-gradle-plugin</a></p></div>
-<div class="imageblock" style=""><img src="./images/android-25-preview.png" alt="android 25 preview" /></div></section>
-<section id="performance-guide"><h2>Performance guide</h2><div class="paragraph"><p><a href="https://gradle.github.io/performance-guide/" class="bare">https://gradle.github.io/performance-guide/</a></p></div>
-<div class="imageblock" style=""><img src="./images/gradle-vs-maven-clean-build.png" alt="gradle vs maven clean build" /></div></section>
-<section id="thank-you"><h2>Thank you!</h2><div class="ulist"><ul><li><p>Slides and code : <a href="https://github.com/melix/paris-android-ug-fast-builds" class="bare">https://github.com/melix/paris-android-ug-fast-builds</a></p></li><li><p>Gradle documentation : <a href="http://gradle.org/documentation/" class="bare">http://gradle.org/documentation/</a></p></li><li><p>Follow me: <a href="http://twitter.com/CedricChampeau">@CedricChampeau</a></p></li></ul></div>
-<div class="paragraph"><p>Learn more at <a href="https://gradle.org">www.gradle.org</a></p></div></section></div></div><script src="reveal.js/lib/js/head.min.js"></script><script src="reveal.js/js/reveal.js"></script><script>// See https://github.com/hakimel/reveal.js#configuration for a full list of configuration options
+}</code></pre></div></div></section>
+<section><section id="the-storyteller-application"><h2>The StoryTeller application</h2><div class="ulist"><ul><li><p>Built with Java 8 (hence no modules)</p></li><li><p>6 "modules"</p><div class="ulist"><ul><li><p><code>fairy</code> - Entry point to the storyteller java application</p></li><li><p><code>tale</code> - public <code>Tale</code> interface.</p></li><li><p><code>formula</code> - makes it easy to weave a <code>Tale</code></p></li><li><p><code>actors</code> - represents the characters in a fairy tale.</p></li><li><p><code>pigs</code> - produces an instance of <code>Tale</code> which represents the story of the three little pigs.</p></li><li><p><code>bears</code> - produces an instance of <code>Tale</code> which represents the story of Goldilocks and the three bears.</p></li></ul></div></li></ul></div></section><section id="dependency-graph"><h2>Dependency graph</h2><div class="imageblock" style=""><img src="./images/project-graph.png" alt="project graph" width="1280" height="500px" /></div></section><section id="fairy-storyteller"><h2>Fairy: StoryTeller</h2><div class="listingblock"><div class="content"><pre class="highlight"><code class="java language-java">package org.gradle.fairy.app;
+
+public class StoryTeller {
+    public static void main(String[] args) {
+        ServiceLoader&lt;Tale&gt; loader = ServiceLoader.load(Tale.class);
+        if (!loader.iterator().hasNext()) {
+            System.out.println("Alas, I have no tales to tell!");
+        }
+        for (Tale tale : loader) {
+            tale.tell();
+        }
+    }
+}</code></pre></div></div></section><section id="fairy-build-gradle"><h2>Fairy: build.gradle</h2><div class="listingblock"><div class="content"><pre class="highlight"><code class="groovy language-groovy">dependencies {
+    implementation project(':tale')
+
+    runtimeOnly project(':pigs')
+    runtimeOnly project(':bears')
+}</code></pre></div></div></section><section id="formula-build-gradle"><h2>Formula: build.gradle</h2><div class="listingblock"><div class="content"><pre class="highlight"><code class="groovy language-groovy">dependencies {
+    api project(':tale')
+    api project(':actors')
+
+    testImplementation 'junit:junit:4.12'
+}</code></pre></div></div></section><section id="strong-encapsulation-breakage"><h2>Strong encapsulation breakage</h2><div class="ulist"><ul><li><p><code>ModularityTest</code> lives in <code>Formula</code></p></li><li><p>Let&#8217;s see how encapsulation is broken</p></li></ul></div></section><section id="test-1-should-always-pass"><h2>Test 1: should always pass</h2><div class="listingblock"><div class="content"><pre class="highlight"><code class="java language-java">    @Test
+    public void canReachActor() {
+        Actor actor = Imagination.createActor("Sean Connery");
+        assertEquals("Sean Connery", actor.toString());
+    }</code></pre></div></div></section><section id="test-2-should-fail"><h2>Test 2 : should fail</h2><div class="listingblock"><div class="content"><pre class="highlight"><code class="java language-java">    @Test
+    public void canDynamicallyReachDefaultActor() throws Exception {
+        Class clazz = ModularityTest
+            .class.getClassLoader()
+            .loadClass("org.gradle.actors.impl.DefaultActor");
+        Actor actor = (Actor) clazz.getConstructor(String.class)
+            .newInstance("Kevin Costner");
+        assertEquals("Kevin Costner", actor.toString());
+    }</code></pre></div></div></section><section id="test-3-should-fail"><h2>Test 3 : should fail</h2><div class="listingblock"><div class="content"><pre class="highlight"><code class="java language-java">    @Test
+    public void canReachDefaultActor() {
+        Actor actor = new org.gradle.actors.impl.DefaultActor("Kevin Costner");
+        assertEquals("Kevin Costner", actor.toString());
+    }</code></pre></div></div></section><section id="test-4-fails-already"><h2>Test 4 : fails already!</h2><div class="listingblock"><div class="content"><pre class="highlight"><code class="java language-java">    @Test
+    public void canReachGuavaClasses() {
+        Set&lt;String&gt; strings = com.google.common.collect.ImmutableSet.of("Hello", "Goodbye");
+        assertTrue(strings.contains("Hello"));
+        assertTrue(strings.contains("Goodbye"));
+    }</code></pre></div></div></section><section id="how-does-it-map-to-modular-java-concepts"><h2>How does it map to modular Java concepts?</h2><div class="paragraph"><p>(warning: this is not one to one mapping)</p></div>
+<div class="ulist"><ul><li><p><code>implementation</code> &#8594; requires</p></li><li><p><code>api</code> &#8594; requires <em>transitive</em></p></li><li><p><code>runtimeOnly</code> &#8594; requires <em>static</em></p></li></ul></div></section><section id="source-layout"><h2>Source layout</h2><div class="ulist"><ul><li><p>src/main/java &#8594; your application sources
+*src/test/java &#8594; your test sources</p></li><li><p>We want to compile main and tests separately</p><div class="ulist"><ul><li><p>It&#8217;s good for performance</p></li><li><p>It&#8217;s better for incrementality</p></li><li><p>Problem: one or two modules?</p></li></ul></div></li></ul></div></section></section>
+<section><section id="let-s-migrate" data-background-color="#01303a"><h2>Let&#8217;s migrate!</h2></section><section id="let-s-migrate-2"><h2>Let&#8217;s migrate</h2><div class="ulist"><ul><li><p>Bottom-up approach</p></li><li><p>Fully compatible</p></li><li><p>Modules are consumable as regular jars</p></li></ul></div>
+<div class="paragraph"><p>Let&#8217;s take advantage of that!</p></div></section></section>
+<section><section id="migrate-the-code-actors-code-module"><h2>Migrate the <code>actors</code> module</h2></section><section id="add-the-module-info-descriptor"><h2>Add the module-info descriptor</h2><div class="listingblock"><div class="content"><pre class="highlight"><code class="java language-java">module org.gradle.actors {
+    exports org.gradle.actors;
+    requires guava;
+}</code></pre></div></div></section><section id="compiling-the-module"><h2>Compiling the module</h2><div class="listingblock"><div class="content"><pre class="highlight"><code class="groovy language-groovy">ext.moduleName = 'org.gradle.actors'
+
+sourceCompatibility = 9
+targetCompatibility = 9
+
+compileJava {
+    inputs.property("moduleName", moduleName)
+    doFirst {
+        options.compilerArgs = [
+            '--module-path', classpath.asPath,
+        ]
+        classpath = files()
+    }
+}</code></pre></div></div></section><section id="testing-1-2"><h2>Testing (1/2)</h2><div class="ulist"><ul><li><p>2 possible approaches</p><div class="ulist"><ul><li><p>a test module which reads the main module</p></li><li><p>patch module: easier, more compatible, faster</p></li></ul></div></li></ul></div></section><section id="testing-2-3"><h2>Testing (2/3)</h2><div class="listingblock"><div class="content"><pre class="highlight"><code class="groovy language-groovy">compileTestJava {
+    inputs.property("moduleName", moduleName)
+    doFirst {
+        options.compilerArgs = [
+            '--module-path', classpath.asPath,
+            '--add-modules', 'junit',
+            '--add-reads', "$moduleName=junit",
+            '--patch-module', "$moduleName=" +
+               files(sourceSets.test.java.srcDirs).asPath,
+        ]
+        classpath = files()
+    }
+}</code></pre></div></div></section><section id="testing-3-3"><h2>Testing (3/3)</h2><div class="listingblock"><div class="content"><pre class="highlight"><code class="groovy language-groovy">test {
+    inputs.property("moduleName", moduleName)
+    doFirst {
+        jvmArgs = [
+            '--module-path', classpath.asPath,
+            '--add-modules', 'ALL-MODULE-PATH',
+            '--add-reads', "$moduleName=junit",
+            '--patch-module', "$moduleName=" +
+               files(sourceSets.test.java.outputDir).asPath,
+        ]
+        classpath = files()
+    }
+}</code></pre></div></div></section></section>
+<section><section id="what-about-the-other-projects"><h2>What about the other projects?</h2><div class="ulist"><ul><li><p>They are still regular jars</p></li><li><p>But we <em>know</em> we&#8217;re going to migrate them at some point</p></li></ul></div></section><section id="automatic-modules"><h2>Automatic modules</h2><div class="ulist"><ul><li><p>When a "legacy" jar is added to <em>module path</em></p></li><li><p>Java infers a module name from the <em>file name</em> (uh!)</p></li><li><p>Unless you <em>reserve</em> a module name</p></li></ul></div></section><section id="add-code-automatic-module-name-code"><h2>Add <code>Automatic-Module-Name</code></h2></section><section id="module-name"><h2>Module Name</h2><div class="ulist"><ul><li><p>Add <code>ext.moduleName = '&#8230;&#8203;'</code> on each module</p></li></ul></div></section><section id="configure-the-jar-task"><h2>Configure the jar task</h2><div class="listingblock"><div class="content"><pre class="highlight"><code class="groovy language-groovy">jar {
+    inputs.property("moduleName", moduleName)
+    manifest {
+        attributes('Automatic-Module-Name': moduleName)
+    }
+}</code></pre></div></div></section></section>
+<section><section id="everything-as-a-module"><h2>Everything as a module</h2></section><section id="cross-configure-all-projects"><h2>Cross-configure all projects</h2><div class="listingblock"><div class="content"><pre class="highlight"><code class="groovy language-groovy">subprojects {
+    afterEvaluate {
+         ...
+        compileJava {
+            inputs.property("moduleName", moduleName)
+            doFirst {
+                options.compilerArgs = [
+                    '--module-path', classpath.asPath,
+                ]
+                classpath = files()
+            }
+        }
+
+        ...
+    }
+}</code></pre></div></div></section><section id="remove-code-automatic-module-name-code"><h2>Remove <code>Automatic-Module-Name</code></h2><div class="ulist"><ul><li><p>No longer required</p></li></ul></div></section><section id="move-to-the-new-service-infrastructure"><h2>Move to the new service infrastructure</h2><div class="ulist"><ul><li><p>Replace <code>META-INF/services</code> with <code>module-info</code></p></li></ul></div>
+<div class="listingblock"><div class="content"><pre class="highlight"><code class="groovy language-groovy">module org.gradle.fairy.tale.bears {
+    requires org.gradle.actors;
+    requires transitive org.gradle.fairy.tale;
+    requires org.gradle.fairy.tale.formula;
+
+    provides org.gradle.fairy.tale.Tale
+        with org.gradle.fairy.tale.bears.GoldilocksAndTheThreeBears;
+}</code></pre></div></div></section></section>
+<section><section id="running-the-modular-application"><h2>Running the modular application</h2><div class="ulist"><ul><li><p>Apply the <code>application</code> plugin</p></li><li><p>But requires some tweaking&#8230;&#8203;</p></li></ul></div></section><section id="the-code-run-code-task"><h2>The <code>run</code> task</h2><div class="listingblock"><div class="content"><pre class="highlight"><code class="groovy language-groovy">mainClassName = "$moduleName/org.gradle.fairy.app.StoryTeller"
+
+run {
+    inputs.property("moduleName", moduleName)
+    doFirst {
+        jvmArgs = [
+            '--module-path', classpath.asPath,
+            '--module', mainClassName
+        ]
+        classpath = files()
+    }
+}</code></pre></div></div></section></section>
+<section><section id="we-have-good-news" data-background-color="#01303a"><h2>We have good news!</h2></section><section id="experimental-jigsaw-plugin"><h2>Experimental Jigsaw plugin</h2><div class="listingblock"><div class="content"><pre class="highlight"><code class="groovy language-groovy">plugins {
+    id 'org.gradle.java.experimental-jigsaw' version '0.1.1'
+}</code></pre></div></div></section></section>
+<section><section id="multi-release-jars" data-background-color="#01303a"><h2>Multi-release jars</h2></section><section id="goal"><h2>Goal</h2><div class="ulist"><ul><li><p>Provide several versions of the same class for runtime</p></li></ul></div></section><section id="disclaimer"><h2>Disclaimer</h2><div class="paragraph"><p>Don&#8217;t do this at home</p></div></section><section id="cross-compilation"><h2>Cross-compilation</h2><div class="ulist"><ul><li><p>Running Gradle on Java 9 doesn&#8217;t mean you need to use it</p></li><li><p>You can target different compilers</p></li></ul></div></section><section id="sources-setup"><h2>Sources setup</h2><div class="ulist"><ul><li><p><code>src/main/java</code> : shared sources</p></li><li><p><code>src/main/java9</code> : Java 9 specific sources</p></li></ul></div></section><section id="add-a-source-set"><h2>Add a source set</h2><div class="listingblock"><div class="content"><pre class="highlight"><code class="groovy language-groovy">sourceSets {
+   java9 {
+      java {
+       srcDirs = ['src/main/java9']
+      }
+   }
+}</code></pre></div></div></section><section id="configure-language-level"><h2>Configure language level</h2><div class="listingblock"><div class="content"><pre class="highlight"><code class="groovy language-groovy">compileJava {
+   sourceCompatibility = 8
+   targetCompatibility = 8
+}
+
+compileJava9Java {
+   sourceCompatibility = 9
+   targetCompatibility = 9
+}</code></pre></div></div></section><section id="add-dependency-on-shared-sources"><h2>Add dependency on shared sources</h2><div class="listingblock"><div class="content"><pre class="highlight"><code class="groovy language-groovy">dependencies {
+    java9Implementation files(sourceSets.main.output.classesDirs) {
+       builtBy compileJava
+    }
+}</code></pre></div></div></section><section id="configuring-the-mrjar"><h2>Configuring the MRjar</h2><div class="listingblock"><div class="content"><pre class="highlight"><code class="groovy language-groovy">jar {
+   into('META-INF/versions/9') {
+      from sourceSets.java9.output
+   }
+   manifest.attributes(
+      'Multi-Release': 'true',
+      'Main-Class': 'com.acme.JdkSpecific'
+   )
+}</code></pre></div></div></section><section id="setting-up-a-run-task"><h2>Setting up a run task</h2><div class="listingblock"><div class="content"><pre class="highlight"><code class="groovy language-groovy">task run(type: JavaExec) {
+   dependsOn jar
+   classpath files(jar.archivePath)
+   main = 'com.acme.JdkSpecific'
+}</code></pre></div></div></section><section id="the-code-release-code-flag"><h2>The <code>--release</code> flag</h2><div class="ulist"><ul><li><p>Fixes <code>bootclasspath</code> that no-one uses</p></li><li><p>Available since JDK 9</p></li><li><p>Compiles against the <strong>right</strong> API</p></li><li><p>Gradle will <strong>not</strong> add <code>-source</code>/<code>-target</code></p><div class="ulist"><ul><li><p>Only if <code>--release</code> is present</p></li></ul></div></li></ul></div></section><section id="configuring-compile-tasks"><h2>Configuring compile tasks</h2><div class="listingblock"><div class="content"><pre class="highlight"><code class="groovy language-groovy">project.afterEvaluate {
+   tasks.withType(JavaCompile) {
+      def version = compat(sourceCompatibility)
+      options.compilerArgs.addAll(['--release', version])
+   }
+}</code></pre></div></div></section></section>
+<section><section id="minimal-runtime-image" data-background-color="#01303a"><h2>Minimal runtime image</h2></section><section id="jlink"><h2>jlink</h2><div class="ulist"><ul><li><p>Allows building minimal runtime images</p></li><li><p>requires <strong>full modularization</strong></p><div class="ulist"><ul><li><p>including transitive dependencies</p></li><li><p>hence not relevant in this example (Guava)</p></li></ul></div></li></ul></div></section><section id="no-built-in-task-yet"><h2>No built-in task (yet)</h2><div class="listingblock"><div class="content"><pre class="highlight"><code class="groovy language-groovy">task jlink(type:Exec) {
+   ext.outputDir = file("$buildDir/jlink")
+   inputs.files(configurations.runtimeClasspath)
+   inputs.files(jar.archivePath)
+   outputs.dir(outputDir)
+   dependsOn jar
+   doFirst {
+      outputDir.deleteDir()
+      commandLine '$javaHome/bin/jlink',
+           '--module-path',
+           "$javaHome/jmods/:${configurations.runtimeClasspath.asPath}:${jar.archivePath}",
+           '--add-modules', moduleName,
+           '--output', outputDir
+
+    }
+}</code></pre></div></div></section></section>
+<section><section id="conclusion" data-background-color="#01303a"><h2>Conclusion</h2></section><section id="conclusion-2"><h2>Conclusion</h2><div class="ulist"><ul><li><p>Slides: <a href="https://melix.github.io/javaone-2017-jigsaw" class="bare">https://melix.github.io/javaone-2017-jigsaw</a></p></li><li><p>Discuss: @CedricChampeau</p></li></ul></div></section></section>
+<section id="thanks" data-background-color="#01303a"><h2>Thanks!</h2></section></div></div><script src="reveal.js/lib/js/head.min.js"></script><script src="reveal.js/js/reveal.js"></script><script>// See https://github.com/hakimel/reveal.js#configuration for a full list of configuration options
 Reveal.initialize({
   // Display controls in the bottom right corner
   controls: true,
@@ -182,9 +306,4 @@ Reveal.initialize({
       { src: 'reveal.js/plugin/zoom-js/zoom.js', async: true, condition: function() { return !!document.body.classList; } },
       { src: 'reveal.js/plugin/notes/notes.js', async: true, condition: function() { return !!document.body.classList; } }
   ]
-});</script><div id="footer">
-  <div style="width:100%">
-     <div style="display:inline">Extremely fast builds with Gradle 3 - @CedricChampeau</div>
-     <div style="display:inline; position:absolute; right: 50px;"><img src="images/gradle-logo-min.png"></div>
-  </div>
-</div></body></html>
+});</script></body></html>
