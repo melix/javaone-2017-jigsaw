@@ -39,7 +39,8 @@ Misc OSS contribs (Gradle plugins, deck2pdf, jlangdetect, ...)'''
 * What are Java 9 modules?
 * Migrating an existing app to modules
 * Running tests
-* (bonus) multi-release jars
+* (bonus!) multi-release jars
+* (extra time!) minimal runtime images
 
 
 == JPMS aka Modules for Java
@@ -69,10 +70,10 @@ module com.foo.bar {
 === A module
 
 * Declares dependencies onto other modules
-** optionally transitive (`transitive`)
+** optionally transitive
 * Declares a list of packages it exports
 * will be found on _modulepath_
-* declares services
+* optionally declares services
 
 == Why it's going to break your apps
 
@@ -85,8 +86,8 @@ Death to *split packages*.
 
 == Gradle support for Java 9
 
-* Bad news: limited
 * Good news: it works!
+* Sad news: limited (but in progress)
 
 === What Gradle supports
 
@@ -192,6 +193,7 @@ dependencies {
 === Strong encapsulation breakage
 
 * `ModularityTest` lives in `Formula`
+* Let's see how encapsulation is broken
 
 === Test 1: should always pass
 
@@ -252,8 +254,8 @@ dependencies {
 
 === Source layout
 
-src/main/java -> your application sources
-src/test/java -> your test sources
+* src/main/java -> your application sources
+*src/test/java -> your test sources
 
 * We want to compile main and tests separately
 ** It's good for performance
@@ -603,6 +605,6 @@ task jlink(type:Exec) {
 * Slides: https://melix.github.io/javaone-2017-jigsaw
 * Discuss: @CedricChampeau
 
-[%notitle]
-== Thanks
-image::outro.jpeg[background, size=cover]
+[background-color="#01303a"]
+== Thanks!
+
